@@ -2,99 +2,97 @@ from flask import Flask, jsonify
 from flask import abort
 from flask import make_response
 from flask import request
-from mysql.connector import MySQLConnection, Error
-from python_mysql_dbconfig import read_db_config
-from utils import type_by_num, num_by_type
+from flask_swagger_ui import get_swaggerui_blueprint
+import simplejson as json
+from flask_api import status
+from json_tool import json_vadation ,json_vadation_orders
+
+from sqlalchemy import *
+from sqlalchemy.orm import create_session
+from sqlalchemy.schema import Table, MetaData
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sql_alc import sql_insert,sql_patch,inset_orders, assign_orders,complete_orders,valid_id_courier,validate_order_courier
+from db_conf import Base,engine
+
 
 app = Flask(__name__)
+#app.config.from_object(Config)
 
-
-def insert_courier(json_list):
-    query_couriers = "INSERT INTO couriers(id,courier_type) "\
-                    "VALUES(%s,%s)"
-    courier_region = "INSERT INTO region(courires_id,region) "\
-                    "VALUES(%s,%s)"
-    working_hours = "INSERT INTO working_hours(courires_id,start_time,end_time) "\
-                    "VALUES(%s,%s,%s)"
-    try:
-        db_config = read_db_config()
-        conn = MySQLConnection(**db_config)
-
-        cursor = conn.cursor()
-        for i in range(len(json_list)):
-            args = (json_list[i]['courier_id'], json_list[i]['courier_type'])
-            cursor.execute(query_couriers, args)
-            for j in range(len(json_list[i]['regions'])):
-                args = (json_list[i]['courier_id'], json_list[i]['regions'][j])
-                cursor.execute(courier_region, args)
-            for j in range(len(json_list[i]['working_hours'])):
-                hours = json_list[i]['working_hours'][j].split('-')
-                args = (json_list[i]['courier_id'], hours[0], hours[1])
-                cursor.execute(working_hours, args)
-
-        if cursor.lastrowid:
-            print('last insert id', cursor.lastrowid)
-        else:
-            print('last insert id not found')
-
-        conn.commit()
-    except Error as error:
-        print(error)
-
-    finally:
-        cursor.close()
-        conn.close()
-
-tasks = [
-    {
-        'id': 1,
-        'title': u'Buy groceries',
-        'description': u'Milk, Cheese, Pizza, Fruit, Tylenol', 
-        'done': False
-    },
-    {
-        'id': 2,
-        'title': u'Learn Python',
-        'description': u'Need to find a good Python tutorial on the web', 
-        'done': False
+### swagger specific ###
+SWAGGER_URL = '/swagger'
+API_URL = '/static/openapi.json'
+SWAGGERUI_BLUEPRINT = get_swaggerui_blueprint(
+    SWAGGER_URL,
+    API_URL,
+    config={
+        'app_name': "Seans-Python-Flask-REST-Boilerplate"
     }
-]
+)
+app.register_blueprint(SWAGGERUI_BLUEPRINT, url_prefix=SWAGGER_URL)
+
+
+
+
+def loadSession():
+    """"""
+    metadata = Base.metadata
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    return session
+
 
 @app.route('/couriers', methods=['POST'])
 def post_couriers():
-    insert_courier(request.json['data'])
-    return 'sucsess'
+    validation_res = json_vadation(request.json,code = 'POST').json_validate()
+    if len(validation_res) == 0:
+        ins_ids = sql_insert(request.json['data'],session=loadSession())
+        return make_response(jsonify({'couriers':ins_ids}),201)
+    else:
+        return make_response(jsonify({'validation_error': {'couriers':validation_res}}), 400)
+
 
 
 @app.errorhandler(404)
 def not_found(error):
     return make_response(jsonify({'error': 'Not found'}), 404)
 
-@app.route('/tasks', methods=['GET'])
-def get_tasks():
-    return jsonify({'tasks': tasks})
+@app.route('/orders', methods=['POST'])
+def post_orders():
 
-from flask import abort
+    validation_res = json_vadation_orders(request.json).json_validate()
+    if len(validation_res) == 0:
+        ins_id = inset_orders(request.json['data'],session=loadSession())
+        return make_response(jsonify({'orders':ins_id}),201)
+    else:
+        return make_response(jsonify({'validation_error': {'couriers':validation_res}}), 400)
 
-@app.route('/tasks/<int:task_id>', methods=['GET'])
-def get_task(task_id):
-    #task = filter(lambda t: t['id'] == task_id, tasks)
-    # if len(task) == 0:
-    #     abort(404)
-    return jsonify({'task': tasks[0]})
+@app.route('/orders/assign', methods=['POST'])
+def orders_assign():
+    if valid_id_courier(request.json["courier_id"],session=loadSession()):
+        ans = assign_orders(request.json,session=loadSession())
+        return make_response(jsonify(ans),200)
+    else:
+        return abort(400)
 
-@app.route('/tasks', methods=['POST'])
-def create_task():
-    if not request.json or not 'title' in request.json:
-        abort(400)
-    task = {
-        'id': tasks[-1]['id'] + 1,
-        'title': request.json['title'],
-        'description': request.json.get('description', ""),
-        'done': False
-    }
-    tasks.append(task)
-    return jsonify({'task': task}), 201
+@app.route('/orders/complete', methods=['POST'])
+def orders_complete():
+    print(request.json)
+    if validate_order_courier(request.json,session=loadSession()):
+        return make_response(jsonify({"order_id":request.json['order_id']}))
+    else:
+    #complete_orders(request.json,session=loadSession())
+        return abort(400)
+    
+
+
+@app.route('/couriers/<int:courier_id>', methods=['PATCH'])
+def patch_courier(courier_id):
+    if json_vadation(request.json,code = 'PATCH').json_validate():
+        res = sql_patch(request.json,courier_id,session=loadSession())
+        return jsonify(res), 200   
+    return  abort(400)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
