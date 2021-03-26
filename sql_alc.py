@@ -1,98 +1,124 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from db_conf import Couriers, Regions, Working_hours, Orders, Delivery_hours,Complete_order_id
 from courier_model import courier_model, formatted_date
 
+#class for connect database and flask requests
+class sqlite_connector():
+    def __init__(self, db_obj):
+        self.db = db_obj
 
+    def insert_couers(self,json_response):
+        insert_id = []
+        couriers = json_response['data']
+        session = self.db.load_sesion()
 
-def sql_insert(json_list,session):
+        for courier in couriers:
+            self.db.insert_courier(courier,session)
+            insert_id.append({'id': courier['courier_id']})
 
-    insert_id = []
-    for i in range(len(json_list)): 
-        session.add(Couriers(id=json_list[i]['courier_id'], courier_type=json_list[i]['courier_type'])) 
-        for j in range(len(json_list[i]['regions'])):
-            session.add(Regions(courier_id=json_list[i]['courier_id'], region = json_list[i]['regions'][j]))
-        for j in range(len(json_list[i]['working_hours'])):
-            parse_hours = json_list[i]['working_hours'][j].split('-')
-            session.add(Working_hours(courier_id = json_list[i]['courier_id'],\
-                                    start_hours = parse_hours[0], end_hours = parse_hours[1]))
-        insert_id.append({'id': json_list[i]['courier_id']})
-    session.commit()                                     
-    
-    return insert_id
-
-def sql_patch(json_list,courier_id,session):
-    for key in json_list.keys():
-        if key == 'courier_type':
-            edited = session.query(Couriers).filter_by(id=int(courier_id)).one()
-            edited.courier_type = json_list['courier_type']
-            session.add(edited)
-            session.commit()
-        elif key == 'regions':
-            delete = session.query(Regions).filter_by(courier_id=int(courier_id))
-            for d in delete:
-                session.delete(d)
-            session.commit()
-            for j in range(len(json_list['regions'])):
-                session.add(Regions(courier_id=int(courier_id), region = json_list['regions'][j]))
-            session.commit() 
-        elif key == 'working_hours':
-            delete = session.query(Working_hours).filter_by(courier_id=int(courier_id))
-            for d in delete:
-                session.delete(d)
-            session.commit()
-            for j in range(len(json_list['working_hours'])):
-                parse_hours = json_list['working_hours'][j].split('-')
-                session.add(Working_hours(courier_id = int(courier_id),\
-                                        start_hours = parse_hours[0], end_hours = parse_hours[1]))
-            session.commit()
-    return get_info_by_id(courier_id,session)
-
-
-
-def get_info_by_id(courier_id,session):
-    courier = {"courier_id": courier_id}
-    c_type = session.query(Couriers).filter_by(id=int(courier_id)).all()
-    print(c_type)
-    if c_type:
-        courier['courier_type'] =  c_type[0].courier_type
-        regions = session.query(Regions).filter_by(courier_id=int(courier_id)).all()
-        region_list = []
-        for r in regions:
-            region_list.append(r.region)
-        courier['regions'] = region_list
-        times = session.query(Working_hours).filter_by(courier_id=int(courier_id)).all()
-        time = []
-        for t in times:
-            time.append("{}-{}".format(t.start_hours,t.end_hours))
-        courier['working_hours'] = time
-        return courier
-
-def valid_id_courier(courier_id,session):
-    return bool(session.query(Couriers).filter_by(id=int(courier_id)).all())
-
-def inset_orders(json_list,session):
-    insert_id = []
-    for i in range(len(json_list)): 
-        session.add(Orders(order_id=json_list[i]['order_id'],\
-                             weight=json_list[i]['weight'], region = json_list[i]['region']))
         session.commit()
-        for j in range(len(json_list[i]['delivery_hours'])):
-            parse_hours = json_list[i]['delivery_hours'][j].split('-')
-            session.add(Delivery_hours(order_id = json_list[i]['order_id'],\
-                                    start_hours = parse_hours[0], end_hours = parse_hours[1]))
-        insert_id.append({'id': json_list[i]['order_id']})
-    session.commit()
-    return insert_id
+        session.close()
+
+        return insert_id
+
+    def patch_courier(self, json_response, courier_id):
+        session = self.db.load_sesion()
+        edited = self.db.valid_id_courier(courier_id,session)
+        if edited:
+            for key in json_response.keys():
+                edited = self.db.courier_patch_by_key(courier_id, {key:json_response[key]}, session)
+        if self.db.courier_is_in_complete_orders(edited['courier_id'],session):
+            uncomplite_ids = [x[0] for x in self.db.get_uncomplete_orders(edited['courier_id'],session)]
+            check_orders = []
+            for ord in uncomplite_ids:
+                check_orders.append(self.db.get_order_by_id(ord,session))
+              
+            check_output = courier_model(edited,check_orders).assign_orders()
+            check_orders = [x['order'] for x in check_orders]
+            #check_output = [x['order_id'] for x in check_output]
+            print('change_cour',edited)
+            if check_orders != check_output:
+                print('change')
+                for ord in check_orders:
+                    print(ord)
+                    self.db.delete_uncomplete_by_id(ord,session)
+                self.db.insert_into_complete(edited,check_output,session)
+                
+            print("1",check_orders)
+            print("2",check_output)
+
+        
+        session.commit()
+        session.close()
+        return edited
+
+    def insert_orders(self, json_response):
+        insert_id = []
+        orders = json_response['data']
+        session = self.db.load_sesion()
+
+        for order in orders:
+            self.db.insert_order(order, session)
+            insert_id.append({'id': order['order_id']})
+        session.commit()
+        session.close()
+        return insert_id
+
+    def assign_orders(self, json_response): 
+        session = self.db.load_sesion()
+        if self.db.valid_id_courier(json_response['courier_id'],session):
+            # filter orders by region and weight
+            uncomplete = self.db.get_uncomplete_orders(json_response['courier_id'],session)    
+            print('UNCOMPLETE',uncomplete)
+            if uncomplete:
+                answer = {
+                        'orders':[{'id':x[0]} for x in uncomplete],
+                        "assign_time": uncomplete[0][1]
+                        }
+
+                session.commit()
+                session.close()
+                return answer
+            else:
+                available_orders = self.db.order_filtered(json_response['courier_id'], session)
+                
+                courier = self.db.get_couier_by_id(json_response['courier_id'],session)
+                answer = {'orders':[]}
+                if available_orders:
+
+                    take_ids = courier_model(courier=courier,orders = available_orders).assign_orders()
+                    answer = self.db.insert_into_complete(courier,take_ids,session)
+
+                    session.commit()
+                    session.close()
+                return answer                       
+        else:
+            return False
+    
+    def complete_orders(self,json_request):
+
+        session = self.db.load_sesion()
+        if self.db.is_in_complete_orders(json_request['order_id'],session)\
+        and self.db.courier_is_in_complete_orders(json_request['courier_id'], session):
+            answer = self.db.inset_complete_time(json_request['order_id'],json_request['courier_id'],\
+                                        json_request['complete_time'],session)
+            session.commit()
+            session.close()
+            return answer
+        else:
+            return False
+                                          
+
+
 
 def assign_orders(json_list,session):
     courier = get_info_by_id(json_list['courier_id'], session)
     condition = (0.01,50.0)
     if courier['courier_type'] == 'foot':
         condition = (0.01,10.0)
-    if courier['courier_type'] == 'bike':
+    elif courier['courier_type'] == 'bike':
         condition = (0.01,15.0)
-    if courier['courier_type'] == 'car':
+    elif courier['courier_type'] == 'car':
         condition = (0.01,50.0)
     
     cur_orders = [r.order_id for r in session.query(Complete_order_id.order_id).distinct()]

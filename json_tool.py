@@ -2,7 +2,7 @@ import jsonschema
 import simplejson as json
 
 class json_vadation():
-    def __init__(self,response, code ,path = 'static\openapi.json'):
+    def __init__(self,response, code ,path = 'static/openapi.json'):
         self.code = code
         self.json_obj = response
         with open(path, 'r') as f:
@@ -34,7 +34,7 @@ class json_vadation():
                 return False
 
 class json_vadation_orders():
-    def __init__(self,response ,path = 'static\openapi.json'):
+    def __init__(self,response ,path = 'static/openapi.json'):
         self.json_obj = response
         with open(path, 'r') as f:
             schema_data = f.read()

@@ -1,1 +1,8 @@
-DB_URL = 'mysql://root:Ficka1@2@3@@localhost:3306/couriers'
+# loaction db file
+databaseFile = 'db_sqlite3/mydb.sqlite'
+
+# initial table file location
+sqlFile = 'db_sqlite3/deploy_db.sql'
+
+#engine for SQLalhemy
+SQLITE = 'sqlite'
