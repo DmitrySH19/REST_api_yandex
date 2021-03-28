@@ -1,5 +1,49 @@
 import jsonschema
 import simplejson as json
+import json
+from openapi_schema_validator import oas30_format_checker
+
+
+class json_validate():
+    def __init__(self, path = 'static/openapi.json'):
+        with open(path, 'r') as f:
+            self.schema = json.loads(f.read())
+
+    def validate(self, request):
+        code = request.url[19:]
+        #json_obj = request.
+        
+        if 'data' in request.json.keys():
+            json_obj = request.json['data']
+
+        schema = self.get_schema(code)
+        print('code:',code)
+        print('json:',json_obj)
+        print('schema:',schema)
+        mis_validate = []
+        val_res = False
+        for data in json_obj:
+            try:
+                jsonschema.validate(data, schema)
+            except:
+                val_res = True
+                if code == '/couriers' or code == '/orders':
+                    mis_validate.append({'id': tuple(data.values())[0]})
+        print("mis_va",mis_validate)
+        if mis_validate:
+            return mis_validate
+        else:
+            return val_res
+
+    def get_schema(self,code):
+        if code == '/couriers':
+            return self.schema["components"]["schemas"]["CourierItem"]
+        elif code == ('/couriers/'):
+            return self.schema["components"]["schemas"]["CourierUpdateRequest"]
+        elif code == '/orders':
+            return self.schema["components"]["schemas"]["OrderItem"]
+    
+
 
 class json_vadation():
     def __init__(self,response, code ,path = 'static/openapi.json'):

@@ -3,7 +3,7 @@ import datetime
 from datetimerange import DateTimeRange
 
 def formatted_date():
-    return datetime.datetime.utcnow().isoformat()[:-3]+'Z'
+    return datetime.datetime.utcnow().isoformat()[:-4]+'Z'
 
 class courier_model():
     def __init__(self,courier,orders):

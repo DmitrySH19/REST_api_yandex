@@ -48,9 +48,10 @@ FOREIGN KEY (`order_id`) REFERENCES `orders` (`order_id`)
 
 CREATE TABLE `complete_order_id` (
 `order_id` INTEGER NOT NULL,
-`courier_id` INTEGER DEFAULT -1 NOT NULL,
+`courier_id` INTEGER NOT NULL,
 `assign_time` TEXT  NULL,
-`complete_time` TEXT NULL,
+`complite_time` TEXT  NULL,
+`order_num` INTEGER NULL,
 PRIMARY KEY (`order_id`)
 );
 

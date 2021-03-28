@@ -70,12 +70,14 @@ class Complete_order_id(object):
     courier_id = Column(Integer)
     assign_time = Column(String)
     complite_time = Column(String)
+    order_num = Column(Integer)
 
-    def __init__(self,order_id, courier_id, assign_time, complite_time):
+    def __init__(self,order_id, courier_id, assign_time, complite_time = None, order_num = None):
         self.order_id = order_id
         self.courier_id = courier_id
         self.assign_time = assign_time
         self.complite_time = complite_time
+        self.order_num = order_num
 
 class MyDatabase:
     
@@ -187,6 +189,10 @@ class MyDatabase:
     
     def courier_is_in_complete_orders(self,courier_id,session):
         return bool(session.query(Complete_order_id).filter_by(courier_id=int(courier_id)).all())
+    
+    def is_courier_complete_orders(self, courier_id, session):
+        return bool(session.query(Complete_order_id).filter(Complete_order_id.courier_id == int(courier_id),\
+            Complete_order_id.assign_time != None, Complete_order_id.complite_time != None).all())
 
 
     def insert_order(self, order, session):
@@ -219,22 +225,22 @@ class MyDatabase:
                     'orders':[],
                     "assign_time": formatted_date(),
                     }
-
+            
             for order in order_ids:
                 answer['orders'].append({'id':order})
                 session.add(Complete_order_id(order_id = order, courier_id = courier['courier_id'],\
-                            assign_time = answer['assign_time'],complite_time='-1'))
+                            assign_time = answer['assign_time']))
             
             return answer
         else:
             return {'orders':[]}
 
     def inset_complete_time(self,order_id,courier_id,complete_time, session):
-
+        count_complite_orders = len(self.get_complete_orders(courier_id,session))
         session.query(Complete_order_id)\
                 .filter(Complete_order_id.order_id==order_id,
                         Complete_order_id.courier_id == courier_id)\
-                .update({'complete_time':complete_time})
+                .update({'complite_time':complete_time, 'order_num': count_complite_orders + 1})
 
         return {'order_id':order_id}
 
@@ -278,11 +284,19 @@ class MyDatabase:
         session.delete(delete)
 
     def get_uncomplete_orders(self, courier_id, session):
-        uncompete = session.query(Complete_order_id)\
-                            .filter(Complete_order_id.courier_id == courier_id)\
+        uncomplite= session.query(Complete_order_id.order_id,Complete_order_id.assign_time)\
+                            .filter(Complete_order_id.courier_id == courier_id,\
+                                    Complete_order_id.complite_time == None)\
                             .all()
-
-        uncompete = [(id.order_id,id.assign_time) for id in uncompete if id.complete_time == None]
-        return uncompete
-
-        
+        print(uncomplite)
+        #uncomplite = [x[0] for x in uncomplite]
+        return uncomplite
+    
+    def get_complete_orders(self, courier_id,session):
+        complite = session.query(Orders.order_id,Orders.region,Complete_order_id.assign_time,Complete_order_id.complite_time,Complete_order_id.order_num)\
+                            .filter(Complete_order_id.courier_id == courier_id,\
+                                    Complete_order_id.complite_time != None,\
+                                    Complete_order_id.order_id == Orders.order_id
+                                    )\
+                            .all()      
+        return complite

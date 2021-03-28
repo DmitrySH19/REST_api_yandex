@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from courier_model import courier_model, formatted_date
+from courier_statistic import courier_statistic
 
 #class for connect database and flask requests
 class sqlite_connector():
@@ -108,89 +109,20 @@ class sqlite_connector():
         else:
             return False
                                           
-
-
-
-def assign_orders(json_list,session):
-    courier = get_info_by_id(json_list['courier_id'], session)
-    condition = (0.01,50.0)
-    if courier['courier_type'] == 'foot':
-        condition = (0.01,10.0)
-    elif courier['courier_type'] == 'bike':
-        condition = (0.01,15.0)
-    elif courier['courier_type'] == 'car':
-        condition = (0.01,50.0)
-    
-    cur_orders = [r.order_id for r in session.query(Complete_order_id.order_id).distinct()]
-
-    x = session.query(Orders.order_id,
-                     Orders.weight,
-                     Orders.region,
-                     Delivery_hours.start_hours,
-                     Delivery_hours.end_hours,
-                     )\
-        .filter(
-            Orders.region.in_(courier['regions']),
-            Orders.weight.between(*condition),
-            Orders.order_id == Delivery_hours.order_id,
-            Orders.order_id.notin_(cur_orders)
-                                        ).all()
-    
-   
-    if x != None:
-        c = session.query(Orders.order_id).\
-            filter(Orders.order_id == (Complete_order_id.order_id)).all()
-        avaibale_orders = []
-        prev_ord = None
-        count = 0
-        first = False
-        for st in x:
-            if not prev_ord:
-                prev_ord = st.order_id
-                first = True
-            if prev_ord == st.order_id and (not first):
-                avaibale_orders[count-1][3].append(str(st.start_hours)+'-'+str(st.end_hours))
+    def get_courier(self, courier_id):
+        session = self.db.load_sesion()
+        if self.db.valid_id_courier(courier_id,session):
+            courier = self.db.get_couier_by_id(courier_id,session)
+            if self.db.is_courier_complete_orders(courier_id,session):
+                orders = self.db.get_complete_orders(courier_id,session)
+                rating, earnings =courier_statistic(courier,orders).calulate_statistic()
+                print('rating',rating)
+                print('earnings', earnings)
+                session.commit()
+                session.close()
+                courier['rating'] = rating
+                courier['earnings'] = earnings
+                return courier
             else:
-                count += 1
-                avaibale_orders.append((
-                    st.order_id,
-                    st.weight,
-                    st.region,
-                    [str(st.start_hours)+'-'+str(st.end_hours)]
-                ))
-                first = False
-                prev_ord = st.order_id
-        c = courier_model(courier=courier,orders = avaibale_orders).assign_orders()
-        if c:
-            answer = {
-                'orders':[],
-                "assign_time": formatted_date(),
-                }
-            print(c)
-            for order in c:
-                answer['orders'].append({'id':order[0]})
-                session.add(Complete_order_id(order_id = order[0], courier_id = courier['courier_id'],\
-                            assign_time = answer['assign_time']))
-            session.commit()
-            return answer
-        else:
-            return {'orders':[]}
-
-def complete_orders(json_list,session):
-    pass
-
-def validate_order_courier(json_list,session):
-    x = session.query(Complete_order_id.order_id,Complete_order_id.courier_id)\
-                .filter(
-                        Complete_order_id.order_id == json_list["order_id"],
-                        Complete_order_id.courier_id == json_list["courier_id"]
-                                                    ).all()
-    if x:
-        session.query(Complete_order_id).\
-        filter(Complete_order_id.order_id == json_list["order_id"],
-               Complete_order_id.courier_id == json_list["courier_id"]).\
-        update({"complete_time": json_list["complete_time"]})
-        session.commit()
-        return True  
-    else:
-        return False
+                print('not one complete_order')
+                return courier
