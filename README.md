@@ -89,4 +89,3 @@ location / {
 > sudo nginx -t
 ### if no errosrs:
 > sudo systemctl restart nginx
-> netstat 0.0.0.0:8080
