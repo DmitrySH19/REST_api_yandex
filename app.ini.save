@@ -1,0 +1,10 @@
+module = wsgi:app
+
+master = true
+processes = 4
+
+[uwsgi]
+module = wsgi:app
+
+master = true
+processes = 4
