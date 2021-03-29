@@ -30,7 +30,7 @@ die-on-term = true
 ```
 ### Save and close.
 ___
-## 4) create servise for wsgi
+## 4) create service for wsgi
 > sudo nano /etc/systemd/system/app.service
 
 ### write:
@@ -40,12 +40,12 @@ Description=uWSGI instance to serve app
 After=network.target
 
 [Service]
-User=ezrial321
+User=entrant
 Group=www-data
 
-WorkingDirectory=/home/ezrial321/REST_api_yandex
-Environment="PATH=/home/ezrial321/REST_api_yandex/yandex_linux/bin"
-ExecStart=/home/ezrial321/REST_api_yandex/yandex_linux/bin/uwsgi --ini app.ini
+WorkingDirectory=/home/entrant/REST_api_yandex
+Environment="PATH=/home/entrant/REST_api_yandex/yandex_linux/bin"
+ExecStart=/home/entrant/REST_api_yandex/yandex_linux/bin/uwsgi --ini app.ini
 
 
 [Install]
@@ -78,7 +78,7 @@ listen 0.0.0.0:8080;
 
 location / {
     include uwsgi_params;
-    uwsgi_pass unix:/home/ezrial321/REST_api_yandex/app.sock;
+    uwsgi_pass unix:/home/entrant/REST_api_yandex/app.sock;
            }
 }
 ```
